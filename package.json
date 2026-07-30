@@ -1,0 +1,16 @@
+{
+  "name": "tenant-isolation-postgres",
+  "version": "1.0.0",
+  "description": "Multi-tenant isolation patterns for PostgreSQL, with tests that prove the attacks fail",
+  "type": "module",
+  "scripts": {
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down -v",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "verify": "npm run db:up && npm test"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  },
+  "license": "MIT"
+}
