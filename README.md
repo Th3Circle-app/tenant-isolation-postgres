@@ -32,6 +32,11 @@ npm run verify     # starts Postgres, applies migrations, runs the suite
 ℹ pass 15   ℹ fail 0
 ```
 
+Every test above performs the attack. A pass means Postgres refused it.
+
+![npm run verify: 15 tests across 4 suites against real Postgres in Docker, 15 passing in
+556ms](docs/verify.png)
+
 These patterns are extracted from two multi-tenant products I built and operate:
 [th3circle.app](https://th3circle.app) (live, paying subscriptions) and
 [rollout](https://github.com/Th3Circle-app/rollout).
