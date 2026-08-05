@@ -155,6 +155,29 @@ describe("metering the client cannot lie about", () => {
     );
   });
 
+  test("a caller cannot hijack the function body by shadowing a table", async () => {
+    // Postgres searches pg_temp FIRST unless you say otherwise. A `security definer`
+    // function without an explicit search_path resolves its table names in the
+    // caller's path, so this temp table would answer for `profiles` while the body
+    // runs as the owner. The attacker writes their own plan and reads it back
+    // elevated. 004_metering.sql pins pg_temp last, which is the whole defense.
+    await acmeConn.query(
+      `create temp table profiles as
+         select $1::uuid as id, 'pro'::text as plan, 0::integer as releases_used`,
+      [acme.user_id]
+    );
+
+    try {
+      await assert.rejects(
+        () => acmeConn.query("select * from consume_release_slot($1)", ["Hijacked"]),
+        /free plan allows/,
+        "the function must resolve `profiles` in public, not in the caller's pg_temp"
+      );
+    } finally {
+      await acmeConn.query("drop table pg_temp.profiles");
+    }
+  });
+
   test("upgrading via the service role lifts the limit", async () => {
     await service.query("select apply_subscription_event($1,$2,$3)", [
       "evt_upgrade_1",
