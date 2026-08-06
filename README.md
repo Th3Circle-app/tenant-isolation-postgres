@@ -1,6 +1,8 @@
 # Multi-tenant isolation in PostgreSQL
 
-Three layers of tenant isolation, and **15 integration tests that execute the attacks
+[![tests](https://github.com/Th3Circle-app/tenant-isolation-postgres/actions/workflows/test.yml/badge.svg)](https://github.com/Th3Circle-app/tenant-isolation-postgres/actions/workflows/test.yml)
+
+Three layers of tenant isolation, and **16 integration tests that execute the attacks
 and assert they fail**. Runs against real Postgres in Docker. No mocks.
 
 ```bash
@@ -24,18 +26,19 @@ npm run verify     # starts Postgres, applies migrations, runs the suite
   ✔ the free plan allows exactly one release, enforced in the database
   ✔ the counter is incremented by the database, not the caller
   ✔ the internal-write flag does not leak past the transaction
+  ✔ a caller cannot hijack the function body by shadowing a table
   ✔ upgrading via the service role lifts the limit
 ▶ webhook idempotency
   ✔ replaying the same Stripe event is a no-op
   ✔ an end user cannot call the subscription applier directly
 
-ℹ pass 15   ℹ fail 0
+ℹ pass 16   ℹ fail 0
 ```
 
 Every test above performs the attack. A pass means Postgres refused it.
 
-![npm run verify: 15 tests across 4 suites against real Postgres in Docker, 15 passing in
-556ms](docs/verify.png)
+![npm run verify: 16 tests across 4 suites against real Postgres in Docker, 16 passing in
+503ms](docs/verify.png)
 
 These patterns are extracted from two multi-tenant products I built and operate:
 [th3circle.app](https://th3circle.app) (live, paying subscriptions) and
@@ -116,6 +119,36 @@ names the function body resolves.
 
 Webhook handling is idempotent by primary key: Stripe delivers at least once, so the same
 event id arriving twice must not apply the upgrade twice.
+
+## What this maps to in the OWASP Top 10
+
+Every row below is a test in this repo, not an aspiration. Run `npm run verify` and watch
+each one attempt the attack against real Postgres.
+
+| OWASP 2021 | The attack this repo runs | Where |
+|---|---|---|
+| **A01 · Broken Access Control** | Read, update, delete and insert across a tenant boundary | `row isolation` |
+| **A01 · Broken Access Control** | Grant yourself admin, move yourself into another tenant | `privileged columns` |
+| **A03 · Injection** | Shadow `profiles` in `pg_temp` so an elevated function reads the attacker's table | `metering` |
+| **A04 · Insecure Design** | Exceed the free-tier limit by calling the API directly instead of the UI | `metering` |
+| **A05 · Security Misconfiguration** | Disable the protection trigger from an ordinary session | `privileged columns` |
+| **A08 · Data Integrity Failures** | Replay a Stripe webhook to apply the same upgrade twice | `webhook idempotency` |
+
+Two of these are worth singling out.
+
+**A01 is the reason this repo exists.** Row-level security is the control most teams reach
+for, and on its own it closes row scope while leaving column scope wide open. The
+`privileged columns` suite is four attacks that all pass RLS and should still fail.
+
+**A03 does not look like injection.** No user string is concatenated into SQL anywhere in
+this repo. The vector is name resolution: Postgres searches `pg_temp` *first* by default,
+so a caller can `create temp table profiles`, call `consume_release_slot()`, and have the
+elevated function body read their forged plan instead of the real one. `004_metering.sql`
+pins `search_path = public, auth, pg_temp` — one line, and it closes the hole.
+
+That test earns its place. Delete the `search_path` line and re-run: 15 pass, 1 fails.
+A security test that passes whether or not the control exists is decoration, so this one
+was verified by removing the defense and watching it catch it.
 
 ## How the auth surface is faked
 
