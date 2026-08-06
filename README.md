@@ -1,5 +1,7 @@
 # Multi-tenant isolation in PostgreSQL
 
+[![tests](https://github.com/Th3Circle-app/tenant-isolation-postgres/actions/workflows/test.yml/badge.svg)](https://github.com/Th3Circle-app/tenant-isolation-postgres/actions/workflows/test.yml)
+
 Three layers of tenant isolation, and **16 integration tests that execute the attacks
 and assert they fail**. Runs against real Postgres in Docker. No mocks.
 
